@@ -3,34 +3,38 @@ import { TrendingUp, Users, Calendar, AlertCircle } from 'lucide-react';
 export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
   const porcentagem = Math.min((totalArrecadado / metaCiclo) * 100, 100);
   
-  // --- LÓGICA DE DATA INTELIGENTE (COM ROMPIMENTO AUTOMÁTICO) ---
+  // --- LÓGICA DE ALUNOS ATIVOS (REGRA DO MÊS ATUAL) ---
+  const alunosAtivosMes = (() => {
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth() + 1; // JS começa em 0
+    const anoAtual = hoje.getFullYear();
+
+    // 1. Filtra apenas doações deste mês/ano
+    const doacoesDoMes = doacoes.filter(doc => {
+      if (!doc.data_visual) return false;
+      const [dia, mes, ano] = doc.data_visual.split('/');
+      return parseInt(mes) === mesAtual && parseInt(ano) === anoAtual;
+    });
+
+    // 2. Conta CPFs únicos (ou nomes) para não duplicar se o aluno doar 2x no mês
+    const unicos = new Set(doacoesDoMes.map(d => d.aluno_cpf || d.aluno_nome));
+    return unicos.size;
+  })();
+
+  // --- LÓGICA DE DATA INTELIGENTE ---
   const getInfoCiclo = () => {
     const hoje = new Date();
     const anoAtual = hoje.getFullYear();
 
-    // Datas Limites de cada ciclo no ano atual
-    // Lembrete: Mês no JS começa em 0 (0=Jan, 11=Dez)
-    const limiteQ1 = new Date(anoAtual, 2, 28);  // 28 de Março
-    const limiteQ2 = new Date(anoAtual, 5, 27);  // 27 de Junho
-    const limiteQ3 = new Date(anoAtual, 8, 26);  // 26 de Setembro
-    const limiteQ4 = new Date(anoAtual, 11, 12); // 12 de Dezembro
+    const limiteQ1 = new Date(anoAtual, 2, 28);
+    const limiteQ2 = new Date(anoAtual, 5, 27);
+    const limiteQ3 = new Date(anoAtual, 8, 26);
+    const limiteQ4 = new Date(anoAtual, 11, 12);
 
-    // Verifica se a data de hoje AINDA NÃO passou do limite
-    if (hoje <= limiteQ1) {
-      return { data: `28/03/${anoAtual}`, nome: "Ciclo 1 (Verão)" };
-    }
-    if (hoje <= limiteQ2) {
-      return { data: `27/06/${anoAtual}`, nome: "Ciclo 2 (Outono)" };
-    }
-    if (hoje <= limiteQ3) {
-      return { data: `26/09/${anoAtual}`, nome: "Ciclo 3 (Inverno)" };
-    }
-    if (hoje <= limiteQ4) {
-      return { data: `12/12/${anoAtual}`, nome: "Ciclo 4 (Primavera)" };
-    }
-
-    // SE CHEGOU AQUI, É PORQUE JÁ PASSOU DE 12 DE DEZEMBRO
-    // Então mostramos o Ciclo 1 do PRÓXIMO ANO
+    if (hoje <= limiteQ1) return { data: `28/03/${anoAtual}`, nome: "Ciclo 1 (Verão)" };
+    if (hoje <= limiteQ2) return { data: `27/06/${anoAtual}`, nome: "Ciclo 2 (Outono)" };
+    if (hoje <= limiteQ3) return { data: `26/09/${anoAtual}`, nome: "Ciclo 3 (Inverno)" };
+    if (hoje <= limiteQ4) return { data: `12/12/${anoAtual}`, nome: "Ciclo 4 (Primavera)" };
     return { data: `28/03/${anoAtual + 1}`, nome: "Ciclo 1 (Verão)" };
   };
 
@@ -86,12 +90,15 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
           </div>
         </div>
 
-        {/* Card 2: Alunos */}
+        {/* Card 2: Alunos (AGORA COM LÓGICA DE MÊS ATUAL) */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-blue-500">
           <div className="bg-blue-100 p-3 rounded-full text-blue-600"><Users size={28} /></div>
           <div>
-            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos</p>
-            <h3 className="text-3xl font-bold text-gray-800">{doacoes.length} <span className="text-lg text-gray-400 font-normal">/ 20</span></h3>
+            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos (Mês)</p>
+            <h3 className="text-3xl font-bold text-gray-800">
+              {alunosAtivosMes} <span className="text-lg text-gray-400 font-normal">/ 20</span>
+            </h3>
+            <p className="text-[10px] text-gray-400 mt-1">Renovação Mensal Obrigatória</p>
           </div>
         </div>
 
@@ -100,7 +107,6 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
           <div className="bg-orange-100 p-3 rounded-full text-orange-600"><Calendar size={28} /></div>
           <div>
             <p className="text-gray-500 text-xs font-bold uppercase">Encerramento do Ciclo</p>
-            {/* DATA DINÂMICA AQUI */}
             <h3 className="text-2xl font-bold text-gray-800">{infoCiclo.data}</h3>
             <div className="flex items-center gap-1 mt-1">
                <AlertCircle size={12} className="text-orange-600" />
