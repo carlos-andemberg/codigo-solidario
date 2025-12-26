@@ -2,43 +2,76 @@ import { TrendingUp, Users, Calendar, AlertCircle } from 'lucide-react';
 
 export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
   const porcentagem = Math.min((totalArrecadado / metaCiclo) * 100, 100);
-  
-  // --- LÓGICA INTELIGENTE DE ALUNOS ATIVOS (COM CRÉDITO DE MESES) ---
+
+  // --- LÓGICA DE ALUNOS ATIVOS (CORRIGIDA: SOMA ACUMULADA) ---
   const alunosAtivosMes = (() => {
     const hoje = new Date();
-    const mesAtual = hoje.getMonth(); // 0 a 11
-    const anoAtual = hoje.getFullYear();
-    const ativos = new Set();
+    // Ajusta para comparar apenas mês/ano, ignorando hora
+    const dataAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+
+    // 1. Agrupar doações por aluno (CPF ou Nome)
+    const doacoesPorAluno = {};
 
     doacoes.forEach(doc => {
       if (!doc.data_visual || !doc.total_kg) return;
-      
-      // Converte data da doação
-      const [dia, mesStr, anoStr] = doc.data_visual.split('/');
-      const mesDonation = parseInt(mesStr) - 1; // Transforma em 0 a 11
-      const anoDonation = parseInt(anoStr);
 
-      // REGRA: A cada 2kg = 1 mês de crédito
-      const mesesCredito = Math.floor(doc.total_kg / 2);
-      
-      // Se doou menos de 2kg, não ganha mês ativo (opcional, ajustável)
-      if (mesesCredito < 1) return;
+      // Chave única do aluno
+      const chave = doc.aluno_cpf || doc.aluno_nome;
 
-      // Calcula a diferença em meses entre Hoje e a Doação
-      const diffMeses = (anoAtual - anoDonation) * 12 + (mesAtual - mesDonation);
+      if (!doacoesPorAluno[chave]) {
+        doacoesPorAluno[chave] = [];
+      }
 
-      // Se a doação foi feita no passado (ou hoje) E ainda está coberta pelo crédito
-      // Ex: Doou 6kg (3 meses) em Jan.
-      // Em Jan (diff=0): Ativo.
-      // Em Fev (diff=1): Ativo.
-      // Em Mar (diff=2): Ativo.
-      // Em Abr (diff=3): Inativo (já passou dos 3 de crédito).
-      if (diffMeses >= 0 && diffMeses < mesesCredito) {
-        ativos.add(doc.aluno_cpf || doc.aluno_nome);
+      // Converte data "DD/MM/AAAA" para Objeto Date
+      const [dia, mes, ano] = doc.data_visual.split('/');
+      const dataDoc = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+
+      doacoesPorAluno[chave].push({
+        data: dataDoc,
+        peso: Number(doc.total_kg)
+      });
+    });
+
+    // 2. Verificar status de cada aluno individualmente
+    let ativosCount = 0;
+
+    Object.values(doacoesPorAluno).forEach(listaDoacoes => {
+      // Ordena por data (mais antiga para mais recente)
+      listaDoacoes.sort((a, b) => a.data - b.data);
+
+      let validadeAtual = null;
+      let saldoPeso = 0;
+
+      listaDoacoes.forEach(doacao => {
+        // Adiciona peso ao saldo "flutuante"
+        saldoPeso += doacao.peso;
+
+        // Se acumulou 2kg ou mais, converte em meses
+        if (saldoPeso >= 2) {
+          const mesesGanhos = Math.floor(saldoPeso / 2);
+          saldoPeso = saldoPeso % 2; // Guarda o resto (ex: doou 3kg -> ganha 1 mês, sobra 1kg)
+
+          // Define a data de início desse novo crédito
+          let dataInicioCredito = doacao.data;
+
+          // Se a validade anterior ainda está ativa, o crédito começa DEPOIS dela (extensão)
+          if (validadeAtual && validadeAtual > doacao.data) {
+            dataInicioCredito = new Date(validadeAtual);
+          }
+
+          // Adiciona os meses à validade
+          if (!validadeAtual) validadeAtual = new Date(dataInicioCredito);
+          validadeAtual.setMonth(validadeAtual.getMonth() + mesesGanhos);
+        }
+      });
+
+      // 3. Checa se a validade cobre o dia de hoje
+      if (validadeAtual && validadeAtual >= dataAtual) {
+        ativosCount++;
       }
     });
 
-    return ativos.size;
+    return ativosCount;
   })();
 
   // --- LÓGICA DE DATA INTELIGENTE ---
@@ -82,16 +115,18 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
             </div>
             <h2 className="text-3xl font-bold mb-2">Painel de Impacto Social</h2>
             <p className="text-green-100 max-w-xl text-sm leading-relaxed">
-              Gestão transparente do projeto <strong>Código Solidário</strong>. 
+              Gestão transparente do projeto <strong>Código Solidário</strong>.
+            </p>
+            <p className="text-green-100 max-w-xl text-sm leading-relaxed">
               Transformando linhas de código em alimento para Rio Largo.
             </p>
           </div>
-          
+
           <div className="text-center bg-white/10 p-4 rounded-xl backdrop-blur-sm min-w-[140px] border border-white/20">
             <p className="text-xs font-bold text-green-100 uppercase tracking-wider mb-1">Meta Trimestral</p>
             <p className="text-4xl font-bold">{porcentagem.toFixed(0)}%</p>
             <div className="w-full bg-black/20 h-1.5 rounded-full mt-2 overflow-hidden">
-              <div className="bg-white h-full transition-all duration-1000" style={{width: `${porcentagem}%`}}></div>
+              <div className="bg-white h-full transition-all duration-1000" style={{ width: `${porcentagem}%` }}></div>
             </div>
           </div>
         </div>
@@ -99,10 +134,10 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
 
       {/* Cards KPI */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
+
         {/* Card 1: Total */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-green-500 relative group overflow-hidden">
-           <div className="absolute right-0 top-0 w-16 h-16 bg-green-50 rounded-bl-full transition-transform group-hover:scale-125"></div>
+          <div className="absolute right-0 top-0 w-16 h-16 bg-green-50 rounded-bl-full transition-transform group-hover:scale-125"></div>
           <div className="bg-green-100 p-3 rounded-full text-green-600 relative z-10"><TrendingUp size={28} /></div>
           <div className="relative z-10">
             <p className="text-gray-500 text-xs font-bold uppercase">Total Arrecadado</p>
@@ -110,15 +145,15 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
           </div>
         </div>
 
-        {/* Card 2: Alunos (INTELIGENTE) */}
+        {/* Card 2: Alunos (INTELIGENTE & ACUMULATIVO) */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-blue-500">
           <div className="bg-blue-100 p-3 rounded-full text-blue-600"><Users size={28} /></div>
           <div>
-            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos (Vigentes)</p>
+            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos</p>
             <h3 className="text-3xl font-bold text-gray-800">
               {alunosAtivosMes} <span className="text-lg text-gray-400 font-normal">/ 20</span>
             </h3>
-            <p className="text-[10px] text-gray-400 mt-1">Baseado no crédito de doações (2kg = 1 mês)</p>
+            <p className="text-[10px] text-gray-400 mt-1">Ainda não está ativo? Torne-se agora mesmo!</p>
           </div>
         </div>
 
@@ -129,8 +164,8 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
             <p className="text-gray-500 text-xs font-bold uppercase">Encerramento do Ciclo</p>
             <h3 className="text-2xl font-bold text-gray-800">{infoCiclo.data}</h3>
             <div className="flex items-center gap-1 mt-1">
-               <AlertCircle size={12} className="text-orange-600" />
-               <p className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">Lions Club</p>
+              <AlertCircle size={12} className="text-orange-600" />
+              <p className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">Doação via Lions Club</p>
             </div>
           </div>
         </div>
@@ -139,14 +174,14 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
       {/* Lista Recente */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-          <h3 className="font-bold text-gray-700">Últimas Contribuições (Auditadas)</h3>
+          <h3 className="font-bold text-gray-700">Últimas Contribuições</h3>
           <span className="text-xs text-gray-400 border bg-white px-2 py-1 rounded shadow-sm">Visualização Pública</span>
         </div>
         <div className="divide-y divide-gray-100">
           {doacoes.length === 0 ? (
             <div className="p-12 text-center text-gray-400 flex flex-col items-center">
-               <AlertCircle size={32} className="mb-2 text-gray-200" />
-               <p className="text-sm">O banco de dados do ciclo atual está vazio.</p>
+              <AlertCircle size={32} className="mb-2 text-gray-200" />
+              <p className="text-sm">O banco de dados do ciclo atual está vazio.</p>
             </div>
           ) : (
             doacoes.slice(0, 5).map(doc => (
@@ -158,9 +193,9 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
                   <div>
                     <p className="font-bold text-gray-800 text-sm">{doc.aluno_nome}</p>
                     <p className="text-xs text-gray-500 flex items-center gap-1">
-                      {doc.data_visual} • 
+                      {doc.data_visual} •
                       <span className="text-gray-400 font-normal">
-                         {doc.itens?.length || 1} item(ns)
+                        {doc.itens?.length || 1} item(ns)
                       </span>
                     </p>
                   </div>
