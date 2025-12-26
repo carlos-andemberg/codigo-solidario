@@ -76,7 +76,7 @@ function App() {
         <div className="bg-black text-white px-4 py-2 text-xs flex justify-between items-center transition-colors">
           <span className="flex items-center gap-2">
             <ShieldCheck size={14} className="text-green-400" />
-            Admin Logado: {user.email}
+            Monitor Logado: {user.email}
           </span>
           <button onClick={handleLogout} className="flex items-center gap-1 hover:text-gray-300 bg-white/10 px-2 py-1 rounded transition-colors">
             Sair <LogOut size={12} />
