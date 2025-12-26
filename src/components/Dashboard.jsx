@@ -3,22 +3,42 @@ import { TrendingUp, Users, Calendar, AlertCircle } from 'lucide-react';
 export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
   const porcentagem = Math.min((totalArrecadado / metaCiclo) * 100, 100);
   
-  // --- LÓGICA DE ALUNOS ATIVOS (REGRA DO MÊS ATUAL) ---
+  // --- LÓGICA INTELIGENTE DE ALUNOS ATIVOS (COM CRÉDITO DE MESES) ---
   const alunosAtivosMes = (() => {
     const hoje = new Date();
-    const mesAtual = hoje.getMonth() + 1; // JS começa em 0
+    const mesAtual = hoje.getMonth(); // 0 a 11
     const anoAtual = hoje.getFullYear();
+    const ativos = new Set();
 
-    // 1. Filtra apenas doações deste mês/ano
-    const doacoesDoMes = doacoes.filter(doc => {
-      if (!doc.data_visual) return false;
-      const [dia, mes, ano] = doc.data_visual.split('/');
-      return parseInt(mes) === mesAtual && parseInt(ano) === anoAtual;
+    doacoes.forEach(doc => {
+      if (!doc.data_visual || !doc.total_kg) return;
+      
+      // Converte data da doação
+      const [dia, mesStr, anoStr] = doc.data_visual.split('/');
+      const mesDonation = parseInt(mesStr) - 1; // Transforma em 0 a 11
+      const anoDonation = parseInt(anoStr);
+
+      // REGRA: A cada 2kg = 1 mês de crédito
+      const mesesCredito = Math.floor(doc.total_kg / 2);
+      
+      // Se doou menos de 2kg, não ganha mês ativo (opcional, ajustável)
+      if (mesesCredito < 1) return;
+
+      // Calcula a diferença em meses entre Hoje e a Doação
+      const diffMeses = (anoAtual - anoDonation) * 12 + (mesAtual - mesDonation);
+
+      // Se a doação foi feita no passado (ou hoje) E ainda está coberta pelo crédito
+      // Ex: Doou 6kg (3 meses) em Jan.
+      // Em Jan (diff=0): Ativo.
+      // Em Fev (diff=1): Ativo.
+      // Em Mar (diff=2): Ativo.
+      // Em Abr (diff=3): Inativo (já passou dos 3 de crédito).
+      if (diffMeses >= 0 && diffMeses < mesesCredito) {
+        ativos.add(doc.aluno_cpf || doc.aluno_nome);
+      }
     });
 
-    // 2. Conta CPFs únicos (ou nomes) para não duplicar se o aluno doar 2x no mês
-    const unicos = new Set(doacoesDoMes.map(d => d.aluno_cpf || d.aluno_nome));
-    return unicos.size;
+    return ativos.size;
   })();
 
   // --- LÓGICA DE DATA INTELIGENTE ---
@@ -90,15 +110,15 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo }) {
           </div>
         </div>
 
-        {/* Card 2: Alunos (AGORA COM LÓGICA DE MÊS ATUAL) */}
+        {/* Card 2: Alunos (INTELIGENTE) */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-blue-500">
           <div className="bg-blue-100 p-3 rounded-full text-blue-600"><Users size={28} /></div>
           <div>
-            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos (Mês)</p>
+            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos (Vigentes)</p>
             <h3 className="text-3xl font-bold text-gray-800">
               {alunosAtivosMes} <span className="text-lg text-gray-400 font-normal">/ 20</span>
             </h3>
-            <p className="text-[10px] text-gray-400 mt-1">Renovação Mensal Obrigatória</p>
+            <p className="text-[10px] text-gray-400 mt-1">Baseado no crédito de doações (2kg = 1 mês)</p>
           </div>
         </div>
 
