@@ -3,6 +3,46 @@ import { Plus, LayoutList, Trash2, X, User, FileText, Search } from 'lucide-reac
 import { addDoc, collection, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
+// --- FUNÇÃO AUXILIAR: VALIDAÇÃO MATEMÁTICA DE CPF ---
+function validarCPF(cpf) {
+  // Remove tudo que não é número
+  cpf = cpf.replace(/[^\d]+/g, '');
+
+  if (cpf == '') return false;
+
+  // Elimina CPFs inválidos conhecidos (todos iguais)
+  if (cpf.length != 11 || 
+      cpf == "00000000000" || 
+      cpf == "11111111111" || 
+      cpf == "22222222222" || 
+      cpf == "33333333333" || 
+      cpf == "44444444444" || 
+      cpf == "55555555555" || 
+      cpf == "66666666666" || 
+      cpf == "77777777777" || 
+      cpf == "88888888888" || 
+      cpf == "99999999999")
+      return false;
+
+  // Valida 1º dígito
+  let add = 0;
+  for (let i = 0; i < 9; i ++)
+    add += parseInt(cpf.charAt(i)) * (10 - i);
+  let rev = 11 - (add % 11);
+  if (rev == 10 || rev == 11) rev = 0;
+  if (rev != parseInt(cpf.charAt(9))) return false;
+
+  // Valida 2º dígito
+  add = 0;
+  for (let i = 0; i < 10; i ++)
+    add += parseInt(cpf.charAt(i)) * (11 - i);
+  rev = 11 - (add % 11);
+  if (rev == 10 || rev == 11) rev = 0;
+  if (rev != parseInt(cpf.charAt(10))) return false;
+
+  return true;
+}
+
 export default function Gestao({ doacoes, totaisPorTipo }) {
   const [modalAberto, setModalAberto] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -44,8 +84,8 @@ export default function Gestao({ doacoes, totaisPorTipo }) {
       setNovoCpf(aluno.cpf);
     }
   };
-  // ---------------------------------------------------------------------
 
+  // Formatação visual enquanto digita
   const handleCpfChange = (e) => {
     let value = e.target.value.replace(/\D/g, "");
     if (value.length > 11) value = value.slice(0, 11);
@@ -67,9 +107,17 @@ export default function Gestao({ doacoes, totaisPorTipo }) {
 
   const handleSalvarDoacao = async (e) => {
     e.preventDefault();
+    
+    // 1. Validação de Campos Vazios
     if (!novoAluno || !novoCpf || listaItens.length === 0) {
       alert("Preencha Nome, CPF e adicione pelo menos um item.");
       return;
+    }
+
+    // 2. Validação Matemática do CPF (NOVO) 🛡️
+    if (!validarCPF(novoCpf)) {
+      alert("CPF inválido! Verifique os números digitados.");
+      return; // Para tudo se o CPF estiver errado
     }
     
     setCarregando(true);
