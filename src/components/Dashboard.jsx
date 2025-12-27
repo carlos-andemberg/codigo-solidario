@@ -1,33 +1,41 @@
 import { useState } from 'react';
-import { TrendingUp, Users, Calendar, AlertCircle, Package, X, PieChart } from 'lucide-react';
+import { TrendingUp, Users, Calendar, AlertCircle, Package, X, PieChart, CheckCircle2, Clock } from 'lucide-react';
 
 export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisPorTipo }) {
   const [doacaoSelecionada, setDoacaoSelecionada] = useState(null);
-  const [mostrarModalTotais, setMostrarModalTotais] = useState(false); // Novo estado para o modal de totais
+  const [mostrarModalTotais, setMostrarModalTotais] = useState(false);
+  const [mostrarModalAlunos, setMostrarModalAlunos] = useState(false);
+  const [mostrarModalCiclo, setMostrarModalCiclo] = useState(false); // Novo estado para modal de ciclo
 
   const porcentagem = Math.min((totalArrecadado / metaCiclo) * 100, 100);
   
   // --- LÓGICA DE ALUNOS ATIVOS ---
-  const alunosAtivosMes = (() => {
+  const listaAlunosAtivos = (() => {
     const hoje = new Date();
     const dataAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    const doacoesPorAluno = {};
+    const dadosAlunos = {};
 
     doacoes.forEach(doc => {
       if (!doc.data_visual || !doc.total_kg) return;
       const chave = doc.aluno_cpf || doc.aluno_nome;
-      if (!doacoesPorAluno[chave]) doacoesPorAluno[chave] = [];
+      
+      if (!dadosAlunos[chave]) {
+        dadosAlunos[chave] = { nome: doc.aluno_nome, historico: [] };
+      }
+      
       const [dia, mes, ano] = doc.data_visual.split('/');
       const dataDoc = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-      doacoesPorAluno[chave].push({ data: dataDoc, peso: Number(doc.total_kg) });
+      dadosAlunos[chave].historico.push({ data: dataDoc, peso: Number(doc.total_kg) });
     });
 
-    let ativosCount = 0;
-    Object.values(doacoesPorAluno).forEach(listaDoacoes => {
-      listaDoacoes.sort((a, b) => a.data - b.data);
+    const nomesAtivos = [];
+
+    Object.values(dadosAlunos).forEach(aluno => {
+      aluno.historico.sort((a, b) => a.data - b.data);
       let validadeAtual = null;
       let saldoPeso = 0;
-      listaDoacoes.forEach(doacao => {
+      
+      aluno.historico.forEach(doacao => {
         saldoPeso += doacao.peso;
         if (saldoPeso >= 2) {
           const mesesGanhos = Math.floor(saldoPeso / 2);
@@ -40,24 +48,42 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
           validadeAtual.setMonth(validadeAtual.getMonth() + mesesGanhos);
         }
       });
-      if (validadeAtual && validadeAtual >= dataAtual) ativosCount++;
+      
+      if (validadeAtual && validadeAtual >= dataAtual) {
+        nomesAtivos.push(aluno.nome);
+      }
     });
-    return ativosCount;
+
+    return nomesAtivos.sort((a, b) => a.localeCompare(b));
   })();
+
+  const alunosAtivosMes = listaAlunosAtivos.length;
 
   const getInfoCiclo = () => {
     const hoje = new Date();
     const anoAtual = hoje.getFullYear();
-    const limiteQ1 = new Date(anoAtual, 2, 28);
-    const limiteQ2 = new Date(anoAtual, 5, 27);
-    const limiteQ3 = new Date(anoAtual, 8, 26);
-    const limiteQ4 = new Date(anoAtual, 11, 12);
+    // Definição das datas limites
+    const datas = [
+      { nome: "Ciclo 1 (Verão)", data: new Date(anoAtual, 2, 28), str: `28/03/${anoAtual}` },
+      { nome: "Ciclo 2 (Outono)", data: new Date(anoAtual, 5, 27), str: `27/06/${anoAtual}` },
+      { nome: "Ciclo 3 (Inverno)", data: new Date(anoAtual, 8, 26), str: `26/09/${anoAtual}` },
+      { nome: "Ciclo 4 (Primavera)", data: new Date(anoAtual, 11, 12), str: `12/12/${anoAtual}` }
+    ];
 
-    if (hoje <= limiteQ1) return { data: `28/03/${anoAtual}`, nome: "Ciclo 1 (Verão)" };
-    if (hoje <= limiteQ2) return { data: `27/06/${anoAtual}`, nome: "Ciclo 2 (Outono)" };
-    if (hoje <= limiteQ3) return { data: `26/09/${anoAtual}`, nome: "Ciclo 3 (Inverno)" };
-    if (hoje <= limiteQ4) return { data: `12/12/${anoAtual}`, nome: "Ciclo 4 (Primavera)" };
-    return { data: `28/03/${anoAtual + 1}`, nome: "Ciclo 1 (Verão)" };
+    // Encontra o próximo ciclo
+    const proximo = datas.find(c => hoje <= c.data);
+    
+    // Se hoje for depois de todos (ex: fim de dezembro), retorna o primeiro do ano que vem
+    if (!proximo) {
+      return { 
+        ...datas[0], 
+        data: new Date(anoAtual + 1, 2, 28), 
+        str: `28/03/${anoAtual + 1}`,
+        listaCompleta: datas 
+      };
+    }
+
+    return { ...proximo, listaCompleta: datas };
   };
 
   const infoCiclo = getInfoCiclo();
@@ -104,10 +130,10 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
       {/* Cards KPI */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* Card 1: Total (AGORA CLICÁVEL) */}
+        {/* Card 1: Total */}
         <div 
           onClick={() => setMostrarModalTotais(true)}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-green-500 relative group overflow-hidden cursor-pointer hover:bg-green-50 transition-colors"
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-green-500Hv relative group overflow-hidden cursor-pointer hover:bg-green-50 transition-colors"
         >
            <div className="absolute right-0 top-0 w-16 h-16 bg-green-50 rounded-bl-full transition-transform group-hover:scale-125"></div>
           <div className="bg-green-100 p-3 rounded-full text-green-600 relative z-10"><TrendingUp size={28} /></div>
@@ -118,26 +144,37 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-blue-500">
-          <div className="bg-blue-100 p-3 rounded-full text-blue-600"><Users size={28} /></div>
-          <div>
-            <p className="text-gray-500 text-xs font-bold uppercase">Alunos Ativos</p>
+        {/* Card 2: Alunos Ativos */}
+        <div 
+          onClick={() => setMostrarModalAlunos(true)}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-blue-500 relative group overflow-hidden cursor-pointer hover:bg-blue-50 transition-colors"
+        >
+          <div className="absolute right-0 top-0 w-16 h-16 bg-blue-50 rounded-bl-full transition-transform group-hover:scale-125"></div>
+          <div className="bg-blue-100 p-3 rounded-full text-blue-600 relative z-10"><Users size={28} /></div>
+          <div className="relative z-10">
+            <p className="text-gray-500 text-xs font-bold uppercase flex items-center gap-1">Alunos Ativos <CheckCircle2 size={12} /></p>
             <h3 className="text-3xl font-bold text-gray-800">
               {alunosAtivosMes} <span className="text-lg text-gray-400 font-normal">/ 20</span>
             </h3>
-            <p className="text-[10px] text-gray-400 mt-1">Ainda não está ativo? Venha e faça a sua doação!</p>
+            <p className="text-[10px] text-blue-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Ver lista de nomes</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-orange-500">
-          <div className="bg-orange-100 p-3 rounded-full text-orange-600"><Calendar size={28} /></div>
-          <div>
+        {/* Card 3: Ciclo (AGORA CLICÁVEL) */}
+        <div 
+          onClick={() => setMostrarModalCiclo(true)}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 border-l-4 border-l-orange-500 relative group overflow-hidden cursor-pointer hover:bg-orange-50 transition-colors"
+        >
+           <div className="absolute right-0 top-0 w-16 h-16 bg-orange-50 rounded-bl-full transition-transform group-hover:scale-125"></div>
+          <div className="bg-orange-100 p-3 rounded-full text-orange-600 relative z-10"><Calendar size={28} /></div>
+          <div className="relative z-10">
             <p className="text-gray-500 text-xs font-bold uppercase">Encerramento do Ciclo</p>
-            <h3 className="text-2xl font-bold text-gray-800">{infoCiclo.data}</h3>
+            <h3 className="text-2xl font-bold text-gray-800">{infoCiclo.str}</h3>
             <div className="flex items-center gap-1 mt-1">
                <AlertCircle size={12} className="text-orange-600" />
                <p className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">Próxima doação via Lions Club</p>
             </div>
+            <p className="text-[10px] text-orange-600 font-bold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">Ver cronograma completo</p>
           </div>
         </div>
       </div>
@@ -184,7 +221,7 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
         </div>
       </div>
 
-      {/* --- MODAL 1: DETALHES DA DOAÇÃO (INDIVIDUAL) --- */}
+      {/* --- MODAL 1: DETALHES DA DOAÇÃO --- */}
       {doacaoSelecionada && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-[fadeIn_0.2s]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative animate-[scaleIn_0.2s]">
@@ -217,7 +254,7 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
         </div>
       )}
 
-      {/* --- MODAL 2: TOTAIS POR TIPO (NOVO) --- */}
+      {/* --- MODAL 2: TOTAIS POR TIPO --- */}
       {mostrarModalTotais && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-[fadeIn_0.2s]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative animate-[scaleIn_0.2s]">
@@ -232,7 +269,7 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
             <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {totaisPorTipo && Object.keys(totaisPorTipo).length > 0 ? (
                 Object.entries(totaisPorTipo)
-                  .sort(([,a], [,b]) => b - a) // Ordena do maior para o menor peso
+                  .sort(([,a], [,b]) => b - a)
                   .map(([tipo, peso]) => (
                   <div key={tipo} className="flex justify-between items-center p-3 bg-gray-50 border border-gray-100 rounded-lg">
                     <span className="text-sm font-bold text-gray-700">{tipo}</span>
@@ -247,6 +284,89 @@ export default function Dashboard({ doacoes, totalArrecadado, metaCiclo, totaisP
             <div className="border-t pt-4 mt-4 flex justify-between items-center">
               <span className="text-sm text-gray-500">Total Geral</span>
               <span className="text-2xl font-bold text-green-700">{totalArrecadado.toFixed(2)} kg</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 3: LISTA DE ALUNOS ATIVOS --- */}
+      {mostrarModalAlunos && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-[fadeIn_0.2s]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 relative animate-[scaleIn_0.2s]">
+            <button onClick={() => setMostrarModalAlunos(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
+            
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3"><Users size={32} /></div>
+              <h3 className="text-lg font-bold text-gray-800">Alunos Ativos</h3>
+              <p className="text-sm text-gray-500">Alunos regulares com doações em dia</p>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {listaAlunosAtivos.length > 0 ? (
+                listaAlunosAtivos.map((nome, index) => (
+                  <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 rounded-lg hover:bg-blue-50 transition-colors">
+                     <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-xs font-bold text-blue-600 border border-blue-100 shadow-sm">
+                        {index + 1}
+                     </div>
+                    <span className="text-sm font-bold text-gray-700">{nome}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-gray-400 text-sm">Nenhum aluno ativo no momento.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t pt-4 mt-4 flex justify-between items-center">
+              <span className="text-sm text-gray-500">Total Ativos</span>
+              <span className="text-2xl font-bold text-blue-600">{listaAlunosAtivos.length}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 4: CRONOGRAMA DE CICLOS (NOVO) --- */}
+      {mostrarModalCiclo && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-[fadeIn_0.2s]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative animate-[scaleIn_0.2s]">
+            <button onClick={() => setMostrarModalCiclo(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
+            
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-3"><Calendar size={32} /></div>
+              <h3 className="text-lg font-bold text-gray-800">Cronograma de Ciclos</h3>
+              <p className="text-sm text-gray-500">Prazos de entrega para o Lions Club</p>
+            </div>
+
+            <div className="space-y-3">
+              {infoCiclo.listaCompleta.map((ciclo, idx) => {
+                const isCurrent = ciclo.nome === infoCiclo.nome;
+                return (
+                  <div 
+                    key={idx} 
+                    className={`flex justify-between items-center p-4 rounded-lg border transition-all ${
+                      isCurrent 
+                        ? 'bg-orange-50 border-orange-200 shadow-sm scale-[1.02]' 
+                        : 'bg-white border-gray-100 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isCurrent && <Clock size={16} className="text-orange-600 animate-pulse" />}
+                      <span className={`text-sm font-bold ${isCurrent ? 'text-orange-800' : 'text-gray-600'}`}>
+                        {ciclo.nome}
+                      </span>
+                    </div>
+                    <span className={`text-sm font-bold ${isCurrent ? 'text-orange-600' : 'text-gray-400'}`}>
+                      {ciclo.str}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 bg-gray-50 p-4 rounded-lg text-xs text-gray-500 leading-relaxed border border-gray-100 flex gap-2">
+               <AlertCircle size={16} className="text-orange-400 shrink-0" />
+               <p>Os alimentos arrecadados são contabilizados até a data de encerramento de cada ciclo para entrega às instituições parceiras.</p>
             </div>
           </div>
         </div>
